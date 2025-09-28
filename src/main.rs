@@ -36,6 +36,10 @@ pub fn main() {
     }
 
     let mut prev_mouse_state = true;
+    let mut prev_mouse_x: i32 = -1;
+    let mut prev_mouse_y: i32 = -1;
+
+    let mut frame_count = 0;
 
     'running: loop {
         // Background color
@@ -60,17 +64,36 @@ pub fn main() {
             }
         }
 
+        for x in (0..(win_w / square_size)).rev() {
+            for y in (0..(win_h / square_size)).rev() {
+                if sand_vector[(x + y * (win_w / square_size)) as usize] == 1 
+                    && y < (win_h / square_size - 1)
+                {
+                    if sand_vector[(x + (y + 1) * (win_w / square_size)) as usize] !=1 {
+                        sand_vector[(x + y * (win_w / square_size)) as usize] = 0;
+                        sand_vector[(x + (y + 1) * (win_w / square_size)) as usize] = 1;
+                    }
+                }
+            }
+        }
+
         // Get mouse state from the event pump
         let mouse_state = event_pump.mouse_state();
         let x = mouse_state.x() as i32 / square_size;
         let y = mouse_state.y() as i32 / square_size;
 
-        if mouse_state.is_mouse_button_pressed(MouseButton::Left) && !prev_mouse_state {
-            println!("Mouse left pressed at ({}, {})", x, y);
+        if mouse_state.is_mouse_button_pressed(MouseButton::Left) && (!prev_mouse_state || x != prev_mouse_x || y != prev_mouse_y) {
+            //println!("Mouse left pressed at ({}, {})", x, y);
             sand_vector[(x + y * (win_w / square_size)) as usize] += 1;
             sand_vector[(x + y * (win_w / square_size)) as usize] %= 2;
         }
         prev_mouse_state = mouse_state.is_mouse_button_pressed(MouseButton::Left);
+        prev_mouse_x = x;
+        prev_mouse_y = y;
+
+        if frame_count % 2 == 1 {
+            prev_mouse_y = -1;
+        }
 
         for event in event_pump.poll_iter() {
             match event {
@@ -83,6 +106,8 @@ pub fn main() {
         }
 
         canvas.present();
-        sleep(Duration::from_millis(16));
+
+        frame_count += 1;
+        sleep(Duration::from_millis(((1.0 / 30.0) * 1000.0) as u64));
     }
 }
