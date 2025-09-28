@@ -403,84 +403,56 @@ pub fn main() {
                     }
                 }
 
-                                else if material_vector[(x + y * (win_w / square_size)) as usize] == 6
-                                    && y < (win_h / square_size - 1)
-                                {
-                                    let idx = (x + y * (win_w / square_size)) as usize;
-                                    let width = win_w / square_size;
-                                    let height = win_h / square_size;
+                else if material_vector[(x + y * (win_w / square_size)) as usize] == 6
+                    && y < (win_h / square_size - 1)
+                {
+                    let idx = (x + y * (win_w / square_size)) as usize;
+                    let width = win_w / square_size;
+                    let height = win_h / square_size;
 
-                                    let x_isize = x as isize;
-                                    let y_isize = y as isize;
+                    let x_isize = x as isize;
+                    let y_isize = y as isize;
 
-                                    let in_bounds = |nx: isize, ny: isize| -> bool {
-                                        nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize
-                                    };
+                    let in_bounds = |nx: isize, ny: isize| -> bool {
+                        nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize
+                    };
 
-                                    // Check for lava within 2 tiles (5x5 square centered on ice)
-                                    let mut near_lava = false;
-                                    for dy in -2..=2 {
-                                        for dx in -2..=2 {
-                                            if dx == 0 && dy == 0 {
-                                                continue; // skip self
-                                            }
-                                            let nx = x_isize + dx;
-                                            let ny = y_isize + dy;
-                                            if in_bounds(nx, ny) {
-                                                let n_idx = (nx + ny * width as isize) as usize;
-                                                if material_vector[n_idx] == 4 {
-                                                    near_lava = true;
-                                                    break;
-                                                }
-                                            }
-                                        }
-                                        if near_lava {
-                                            break;
-                                        }
-                                    }
-
-                                    if near_lava {
-                                        // Ice melts → water
-                                        material_vector[idx] = 2;
-                                    } else {
-                                        // Usual ice "falling" physics
-                                        let below_idx = (x + (y + 1) * width) as usize;
-
-                                        // Step down if empty or water
-                                        if material_vector[below_idx] == 0 || material_vector[below_idx] == 2 {
-                                            material_vector[idx] = if material_vector[below_idx] != 2 { 0 } else { 2 };
-                                            material_vector[below_idx] = 6;
-                                        } else {
-                                            // Randomly decide whether to try left or right first
-                                            let mut rng = rand::thread_rng();
-                                            let try_right_first = rng.gen_bool(0.5);
-
-                                            let try_move = |dx: isize| -> Option<usize> {
-                                                let new_x = x_isize + dx;
-                                                let new_y = y_isize + 1;
-                                                if in_bounds(new_x, new_y) {
-                                                    Some((new_x + new_y * width as isize) as usize)
-                                                } else {
-                                                    None
-                                                }
-                                            };
-
-                                            let directions = if try_right_first { [1, -1] } else { [-1, 1] };
-
-                                            for &dir in &directions {
-                                                if let Some(target_idx) = try_move(dir) {
-                                                    if material_vector[target_idx] == 0 || material_vector[target_idx] == 2 {
-                                                        material_vector[idx] = if material_vector[target_idx] != 2 { 0 } else { 2 };
-                                                        material_vector[target_idx] = 6;
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                    // Check for lava directly adjacent (8 neighbors)
+                    let mut touching_lava = false;
+                    for dy in -1..=1 {
+                        for dx in -1..=1 {
+                            if dx == 0 && dy == 0 {
+                                continue; // skip self
+                            }
+                            let nx = x_isize + dx;
+                            let ny = y_isize + dy;
+                            if in_bounds(nx, ny) {
+                                let n_idx = (nx + ny * width as isize) as usize;
+                                if material_vector[n_idx] == 4 {
+                                    touching_lava = true;
+                                    break;
                                 }
                             }
                         }
+                        if touching_lava {
+                            break;
+                        }
+                    }
+
+                    if touching_lava {
+                        // Ice melts → water
+                        material_vector[idx] = 2;
+                    } else {
+                        // Only step straight down
+                        let below_idx = idx + width as usize;
+                        if material_vector[below_idx] == 0 || material_vector[below_idx] == 2 {
+                            material_vector[below_idx] = 6;
+                            material_vector[idx] = if material_vector[below_idx] == 2 { 2 } else { 0 };
+                        }
+                    }
+                }
+            }
+        }
 
         // Get mouse state from the event pump
         let mouse_state = event_pump.mouse_state();
