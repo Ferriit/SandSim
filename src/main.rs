@@ -1,6 +1,7 @@
 extern crate sdl3;
 
-use rand::Rng;
+use rand::{Rng, SeedableRng};
+use rand::rngs::StdRng;
 use sdl3::pixels::Color;
 use sdl3::event::Event;
 use sdl3::keyboard::Keycode;
@@ -8,6 +9,64 @@ use sdl3::rect::Rect;
 use sdl3::mouse::MouseButton;
 use std::time::Duration;
 use std::thread::sleep;
+
+
+/// Generates a procedural ice texture using Voronoi noise for "shattered" effect
+/// 
+/// # Arguments
+/// * `width` - width of the texture in tiles
+/// * `height` - height of the texture in tiles
+/// * `seed` - RNG seed for reproducibility
+/// * `cell_count` - number of Voronoi cells (more cells = more cracks)
+///
+/// # Returns
+/// A 2D vector of u8 brightness values (0–255)
+pub fn generate_ice_texture(
+    width: usize,
+    height: usize,
+    seed: u64,
+    cell_count: usize,
+) -> Vec<Vec<u8>> {
+    let mut rng = StdRng::seed_from_u64(seed);
+
+    // Generate Voronoi cell centers
+    let mut centers: Vec<(f64, f64)> = Vec::new();
+    for _ in 0..cell_count {
+        let cx = rng.gen_range(0.0..width as f64);
+        let cy = rng.gen_range(0.0..height as f64);
+        centers.push((cx, cy));
+    }
+
+    // Create texture
+    let mut texture: Vec<Vec<u8>> = vec![vec![180; height]; width]; // base ice brightness
+
+    for x in 0..width {
+        for y in 0..height {
+            let mut distances: Vec<f64> = centers
+                .iter()
+                .map(|&(cx, cy)| {
+                    let dx = cx - x as f64;
+                    let dy = cy - y as f64;
+                    dx*dx + dy*dy // squared distance
+                })
+                .collect();
+
+            distances.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+            let d1 = distances[0];
+            let d2 = distances[1];
+
+            // Edge detection: if close to cell boundary, make it bright (crack)
+            let edge_strength = ((d2 - d1) * 4.0).min(255.0); // scale difference
+            let edge_brightness = if edge_strength < 20.0 { 255 } else { 180 + (rng.gen_range(0.0..30.0) as u8) };
+
+            texture[x][y] = edge_brightness;
+        }
+    }
+
+    texture
+}
+
 
 pub fn main() {
     let sdl_context = sdl3::init().unwrap();
@@ -35,6 +94,7 @@ pub fn main() {
     let mut stone_rng = rand::thread_rng();
 
     let mut rock_texture: Vec<Vec<u8>> = Vec::new();
+    let ice_texture = generate_ice_texture((win_w / square_size) as usize, (win_h / square_size) as usize, stone_rng.gen_range(0..167837262), 160);
 
     for x in 0..(win_w / square_size) {
         rock_texture.push(Vec::new());
@@ -117,12 +177,21 @@ pub fn main() {
                     red = 32;
                     green = 32;
                     blue = 32;
+
                 }
 
                 else if material_vector[(x + y * win_w / square_size) as usize] == 6 {
                     red = 128;
                     green = 196;
                     blue = 255;
+
+                    let crack = ice_texture[x as usize][y as usize];
+
+                    if crack > 250 {
+                        red = 196;
+                        green = 225;
+                        blue = 255;
+                    }
                 }
 
                 canvas.set_draw_color(Color::RGB(red, green, blue));
