@@ -119,6 +119,12 @@ pub fn main() {
                     blue = 32;
                 }
 
+                else if material_vector[(x + y * win_w / square_size) as usize] == 6 {
+                    red = 128;
+                    green = 196;
+                    blue = 255;
+                }
+
                 canvas.set_draw_color(Color::RGB(red, green, blue));
                 let square = Rect::new(
                     x * square_size,
@@ -194,24 +200,31 @@ pub fn main() {
                         }
                     };
 
-                    // Check neighbors for lava (4)
+                    // Check neighbors for lava (4) or ice (6)
                     let neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)];
                     let mut lava_hit: Option<usize> = None;
+                    let mut touching_ice = false;
+
                     for (dx, dy) in neighbors {
                         if let Some(n_idx) = try_move(dx, dy) {
-                            if material_vector[n_idx] == 4 {
-                                lava_hit = Some(n_idx);
-                                break;
+                            match material_vector[n_idx] {
+                                4 => { lava_hit = Some(n_idx); break; }
+                                6 => { touching_ice = true; }
+                                _ => {}
                             }
                         }
                     }
 
                     if let Some(lava_idx) = lava_hit {
-                        // Water → stone
+                        // Water → stone, remove lava
                         material_vector[idx] = 3;
-                        // Remove lava
                         material_vector[lava_idx] = 0;
-                    } else {
+                    } 
+                    else if touching_ice {
+                        // Water touching ice → turns into ice
+                        material_vector[idx] = 6;
+                    } 
+                    else {
                         // Continue normal water physics
                         let below_idx = idx + width as usize;
 
@@ -251,37 +264,50 @@ pub fn main() {
                         }
                     }
                 }
+                else if material_vector[(x + y * win_w / square_size) as usize] == 3 && y < (win_h / square_size - 1) {
+                    let idx = (x + y * win_w / square_size) as usize;
+                    let below = idx + (win_w / square_size) as usize;
+
+                    // Move straight down if empty or water
+                    if material_vector[below] == 0 || material_vector[below] == 2 || material_vector[below] == 4 {
+                        material_vector[below] = 3;
+                        material_vector[idx] = if material_vector[below] == 2 { 2 } else { 0 };
+                    }
+                }
 
                 else if material_vector[(x + y * (win_w / square_size)) as usize] == 4 && y < (win_h / square_size - 1) {
                     let idx: usize = (x + y * (win_w / square_size)) as usize;
                     let below_idx = idx + (win_w / square_size) as usize;
 
+                    let width = win_w / square_size;
+                    let height = win_h / square_size;
+                    let x_isize = x as isize;
+                    let y_isize = y as isize;
+
+                    let try_move = |dx: isize, dy: isize| -> Option<usize> {
+                        let new_x = x_isize + dx;
+                        let new_y = y_isize + dy;
+                        if new_x >= 0 && new_x < width as isize && new_y >= 0 && new_y < height as isize {
+                            Some((new_x + new_y * width as isize) as usize)
+                        } else {
+                            None
+                        }
+                    };
+
+                    let prioritize_left = frame_count % 2 == 0;
+                    let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
+
+                    let mut moved = false;
+
+                    // 1. Try straight down first
                     if material_vector[below_idx] == 0 {
-                        // Move down if empty
                         material_vector[idx] = 0;
                         material_vector[below_idx] = 4;
-                    } else {
-                        let width = win_w / square_size;
-                        let height = win_h / square_size;
-                        let x_isize = x as isize;
-                        let y_isize = y as isize;
+                        moved = true;
+                    }
 
-                        let try_move = |dx: isize, dy: isize| -> Option<usize> {
-                            let new_x = x_isize + dx;
-                            let new_y = y_isize + dy;
-                            if new_x >= 0 && new_x < width as isize && new_y >= 0 && new_y < height as isize {
-                                Some((new_x + new_y * width as isize) as usize)
-                            } else {
-                                None
-                            }
-                        };
-
-                        // Alternate direction priority each frame
-                        let prioritize_left = frame_count % 2 == 0;
-                        let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
-
-                        // Try diagonal down first
-                        let mut moved = false;
+                    // 2. If can't go down, try diagonals
+                    if !moved {
                         for &dir in &directions {
                             if let Some(diag) = try_move(dir, 1) {
                                 if material_vector[diag] == 0 {
@@ -292,33 +318,100 @@ pub fn main() {
                                 }
                             }
                         }
+                    }
 
-                        // If diagonals failed, try horizontal spread
-                        if !moved {
-                            for &dir in &directions {
-                                if let Some(side) = try_move(dir, 0) {
-                                    if material_vector[side] == 0 {
-                                        material_vector[idx] = 0;
-                                        material_vector[side] = 4;
-                                        break;
-                                    }
+                    // 3. If diagonals fail, spread sideways
+                    if !moved {
+                        for &dir in &directions {
+                            if let Some(side) = try_move(dir, 0) {
+                                if material_vector[side] == 0 {
+                                    material_vector[idx] = 0;
+                                    material_vector[side] = 4;
+                                    break;
                                 }
                             }
                         }
                     }
                 }
-                else if material_vector[(x + y * (win_w / square_size)) as usize] == 3 && y < (win_h / square_size - 1) {
-                    let idx: usize = (x + y * (win_w / square_size)) as usize;
-                    let below = idx + (win_w / square_size) as usize;
 
-                    // Move straight down if empty or water
-                    if material_vector[below] == 0 || material_vector[below] == 2 || material_vector[below] == 4 {
-                        material_vector[below] = 3;
-                        material_vector[idx] = if material_vector[below] == 2 { 2 } else { 0 };
-                    }
-                }
-            }
-        }
+                                else if material_vector[(x + y * (win_w / square_size)) as usize] == 6
+                                    && y < (win_h / square_size - 1)
+                                {
+                                    let idx = (x + y * (win_w / square_size)) as usize;
+                                    let width = win_w / square_size;
+                                    let height = win_h / square_size;
+
+                                    let x_isize = x as isize;
+                                    let y_isize = y as isize;
+
+                                    let in_bounds = |nx: isize, ny: isize| -> bool {
+                                        nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize
+                                    };
+
+                                    // Check for lava within 2 tiles (5x5 square centered on ice)
+                                    let mut near_lava = false;
+                                    for dy in -2..=2 {
+                                        for dx in -2..=2 {
+                                            if dx == 0 && dy == 0 {
+                                                continue; // skip self
+                                            }
+                                            let nx = x_isize + dx;
+                                            let ny = y_isize + dy;
+                                            if in_bounds(nx, ny) {
+                                                let n_idx = (nx + ny * width as isize) as usize;
+                                                if material_vector[n_idx] == 4 {
+                                                    near_lava = true;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        if near_lava {
+                                            break;
+                                        }
+                                    }
+
+                                    if near_lava {
+                                        // Ice melts → water
+                                        material_vector[idx] = 2;
+                                    } else {
+                                        // Usual ice "falling" physics
+                                        let below_idx = (x + (y + 1) * width) as usize;
+
+                                        // Step down if empty or water
+                                        if material_vector[below_idx] == 0 || material_vector[below_idx] == 2 {
+                                            material_vector[idx] = if material_vector[below_idx] != 2 { 0 } else { 2 };
+                                            material_vector[below_idx] = 6;
+                                        } else {
+                                            // Randomly decide whether to try left or right first
+                                            let mut rng = rand::thread_rng();
+                                            let try_right_first = rng.gen_bool(0.5);
+
+                                            let try_move = |dx: isize| -> Option<usize> {
+                                                let new_x = x_isize + dx;
+                                                let new_y = y_isize + 1;
+                                                if in_bounds(new_x, new_y) {
+                                                    Some((new_x + new_y * width as isize) as usize)
+                                                } else {
+                                                    None
+                                                }
+                                            };
+
+                                            let directions = if try_right_first { [1, -1] } else { [-1, 1] };
+
+                                            for &dir in &directions {
+                                                if let Some(target_idx) = try_move(dir) {
+                                                    if material_vector[target_idx] == 0 || material_vector[target_idx] == 2 {
+                                                        material_vector[idx] = if material_vector[target_idx] != 2 { 0 } else { 2 };
+                                                        material_vector[target_idx] = 6;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
         // Get mouse state from the event pump
         let mouse_state = event_pump.mouse_state();
@@ -352,9 +445,9 @@ pub fn main() {
                 },
                 Event::MouseWheel { x, y, .. } => {
                     selected_material += y as i8;
-                    selected_material %= 5;
+                    selected_material %= 6;
                     if selected_material == -1 {
-                        selected_material = 4;
+                        selected_material = 5;
                     }
                 }
                 _ => {}
@@ -377,7 +470,10 @@ pub fn main() {
             },
             4 => { // Steel
                 canvas.set_draw_color(Color::RGB(32, 32, 32));
-            }
+            },
+            5 => {
+                canvas.set_draw_color(Color::RGB(128, 196, 255));
+            },
 
             _ => {}
         }
