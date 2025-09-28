@@ -205,10 +205,14 @@ pub fn main() {
                     }
                 }
 
-                else if material_vector[(x + y * win_w / square_size) as usize] == 3 && y < (win_h / square_size - 1) {
-                    if material_vector[(x + (y + 1) * win_w / square_size) as usize] == 0 {
-                        material_vector[(x + y * win_w / square_size) as usize] = 0;
-                        material_vector[(x + (y + 1) * win_w / square_size) as usize] = 3;
+                else if material_vector[(x + y * (win_w / square_size)) as usize] == 3 && y < (win_h / square_size - 1) {
+                    let idx: usize = (x + y * (win_w / square_size)) as usize;
+                    let below = idx + (win_w / square_size) as usize;
+
+                    // Move straight down if empty or water
+                    if material_vector[below] == 0 || material_vector[below] == 2 {
+                        material_vector[below] = 3;
+                        material_vector[idx] = if material_vector[below] == 2 { 2 } else { 0 };
                     }
                 }
             }
@@ -250,11 +254,28 @@ pub fn main() {
                     if selected_material == -1 {
                         selected_material = 2;
                     }
-                    println!("{} {}", selected_material, y);
                 }
                 _ => {}
             }
         }
+
+
+        match selected_material {
+            0 => { // Sand
+                canvas.set_draw_color(Color::RGB(210, 192, 140));
+            },
+            1 => { // Water
+                canvas.set_draw_color(Color::RGB(34, 98, 225));
+            },
+            2 => { // Rock
+                canvas.set_draw_color(Color::RGB(64, 64, 64));
+            },
+
+            _ => {}
+        }
+
+        let square = Rect::new(10, 10, 40, 40);
+        let _ = canvas.fill_rect(square);
 
         canvas.present();
 
