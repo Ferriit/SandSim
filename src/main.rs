@@ -34,6 +34,7 @@ pub fn main() {
             sand_vector.push(0);
         }
     }
+    sand_vector.push(0); // it crashes without this :(
 
     let mut prev_mouse_state = true;
     let mut prev_mouse_x: i32 = -1;
@@ -51,7 +52,9 @@ pub fn main() {
             for y in 0..(win_h / square_size) {
                 //let color: u8 = ((x + y) % 255) as u8;
 
-                let color: u8 = (sand_vector[(x + y * (win_w / square_size)) as usize] * 255) as u8;
+                let clean_random_offset = (((x + y) % 2 + 1) * 192).min(255) as u8;
+
+                let color: u8 = (sand_vector[(x + y * (win_w / square_size)) as usize] * clean_random_offset) as u8;
 
                 canvas.set_draw_color(Color::RGB(color, color, color));
                 let square = Rect::new(
@@ -69,9 +72,17 @@ pub fn main() {
                 if sand_vector[(x + y * (win_w / square_size)) as usize] == 1 
                     && y < (win_h / square_size - 1)
                 {
-                    if sand_vector[(x + (y + 1) * (win_w / square_size)) as usize] !=1 {
+                    if sand_vector[(x + (y + 1) * (win_w / square_size)) as usize] != 1 {
                         sand_vector[(x + y * (win_w / square_size)) as usize] = 0;
                         sand_vector[(x + (y + 1) * (win_w / square_size)) as usize] = 1;
+                    }
+                    else if sand_vector[(x + 1 + (y + 1) * (win_w / square_size)) as usize] != 1 && x + 1 < win_w / square_size {
+                        sand_vector[(x + 1 + (y + 1) * (win_w / square_size)) as usize] = 1;
+                        sand_vector[(x + y * (win_w / square_size)) as usize] = 0;
+                    }
+                    else if sand_vector[(x - 1 + (y + 1) * (win_w / square_size)) as usize] != 1 && x - 1 > 0 {
+                        sand_vector[(x - 1 + (y + 1) * (win_w / square_size)) as usize] = 1;
+                        sand_vector[(x + y * (win_w / square_size)) as usize] = 0;
                     }
                 }
             }
@@ -79,8 +90,11 @@ pub fn main() {
 
         // Get mouse state from the event pump
         let mouse_state = event_pump.mouse_state();
-        let x = mouse_state.x() as i32 / square_size;
-        let y = mouse_state.y() as i32 / square_size;
+        let mut x = mouse_state.x() as i32 / square_size;
+        let mut y = mouse_state.y() as i32 / square_size;
+
+        x = x.min(win_w / square_size - 1).max(0);
+        y = y.min(win_h / square_size - 1).max(0);
 
         if mouse_state.is_mouse_button_pressed(MouseButton::Left) && (!prev_mouse_state || x != prev_mouse_x || y != prev_mouse_y) {
             //println!("Mouse left pressed at ({}, {})", x, y);
@@ -91,7 +105,7 @@ pub fn main() {
         prev_mouse_x = x;
         prev_mouse_y = y;
 
-        if frame_count % 2 == 1 {
+        if frame_count % 1 == 0 {
             prev_mouse_y = -1;
         }
 
