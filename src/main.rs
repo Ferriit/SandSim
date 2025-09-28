@@ -24,15 +24,23 @@ pub fn main() {
 
     let mut material_vector: Vec<u8> = Vec::new();
 
+    let mut selected_material: i8 = 0;
+
     // Window size
     let win_w: i32 = 800;
     let win_h: i32 = 600;
     // Square size
     let square_size: i32 = 10;
 
-    for _x in 0..(win_w / square_size) {
+    let mut stone_rng = rand::thread_rng();
+
+    let mut rock_texture: Vec<Vec<u8>> = Vec::new();
+
+    for x in 0..(win_w / square_size) {
+        rock_texture.push(Vec::new());
         for _y in 0..(win_h / square_size) {
             material_vector.push(0);
+            rock_texture[x as usize].push((stone_rng.gen_range(0.2..0.5) as f64 * 255.0 as f64).round() as u8);
         }
     }
     material_vector.push(0); // it crashes without this :(
@@ -80,6 +88,11 @@ pub fn main() {
                         }
                      }
                 }
+                else if material_vector[(x + y * win_w / square_size) as usize] == 3 {
+                    red = rock_texture[x as usize][y as usize];
+                    green = rock_texture[x as usize][y as usize];
+                    blue = rock_texture[x as usize][y as usize];
+                }
 
                 canvas.set_draw_color(Color::RGB(red, green, blue));
                 let square = Rect::new(
@@ -101,7 +114,7 @@ pub fn main() {
                     let below_idx = (x + (y + 1) * (win_w / square_size)) as usize;
 
                     // Step down if empty or water
-                    if material_vector[below_idx] != 1 {
+                    if material_vector[below_idx] == 0 || material_vector[below_idx] == 2 {
                         material_vector[idx] = if material_vector[below_idx] != 2 { 0 } else { 2 };
                         material_vector[below_idx] = 1;
                     } else {
@@ -129,7 +142,7 @@ pub fn main() {
 
                         for &dir in &directions {
                             if let Some(target_idx) = try_move(dir) {
-                                if material_vector[target_idx] != 1 {
+                                if material_vector[target_idx] == 0 || material_vector[target_idx] == 2 {
                                     material_vector[idx] = if material_vector[target_idx] != 2 { 0 } else { 2 };
                                     material_vector[target_idx] = 1;
                                     break;
@@ -191,6 +204,13 @@ pub fn main() {
                         }
                     }
                 }
+
+                else if material_vector[(x + y * win_w / square_size) as usize] == 3 && y < (win_h / square_size - 1) {
+                    if material_vector[(x + (y + 1) * win_w / square_size) as usize] == 0 {
+                        material_vector[(x + y * win_w / square_size) as usize] = 0;
+                        material_vector[(x + (y + 1) * win_w / square_size) as usize] = 3;
+                    }
+                }
             }
         }
 
@@ -203,19 +223,11 @@ pub fn main() {
         y = y.min(win_h / square_size - 1).max(0);
 
         if mouse_state.is_mouse_button_pressed(MouseButton::Left) {//&& (!prev_mouse_state || x != prev_mouse_x || y != prev_mouse_y) {
-            if material_vector[(x + y * (win_w / square_size)) as usize] != 0 {
-                material_vector[(x + y * (win_w / square_size)) as usize] = 0;
-            } else {
-                material_vector[(x + y * (win_w / square_size)) as usize] = 1;
-            }
+            material_vector[(x + y * (win_w / square_size)) as usize] = selected_material as u8 + 1;
         }
 
         if mouse_state.is_mouse_button_pressed(MouseButton::Right) {
-            if material_vector[(x + y * (win_w / square_size)) as usize] != 0 {
-                material_vector[(x + y * (win_w / square_size)) as usize] = 0;
-            } else {
-                material_vector[(x + y * (win_w / square_size)) as usize] = 2;
-            }
+            material_vector[(x + y * (win_w / square_size)) as usize] = 0;
         }
 
         //prev_mouse_state = mouse_state.is_mouse_button_pressed(MouseButton::Left);
@@ -231,6 +243,14 @@ pub fn main() {
                 Event::Quit {..}
                 | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running;
+                },
+                Event::MouseWheel { x, y, .. } => {
+                    selected_material += y as i8;
+                    selected_material %= 3;
+                    if selected_material == -1 {
+                        selected_material = 2;
+                    }
+                    println!("{} {}", selected_material, y);
                 }
                 _ => {}
             }
