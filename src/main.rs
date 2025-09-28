@@ -52,11 +52,14 @@ pub fn main() {
             for y in 0..(win_h / square_size) {
                 //let color: u8 = ((x + y) % 255) as u8;
 
-                let clean_random_offset = (((x + y) % 2 + 1) * 192).min(255) as u8;
+                // Checkerboard pattern
+                let clean_random_offset = (255 - (((x + y) % 2 + 1) * 215).min(255)) as u8;
 
-                let color: u8 = (sand_vector[(x + y * (win_w / square_size)) as usize] * clean_random_offset) as u8;
+                let red: u8 = (sand_vector[(x + y * (win_w / square_size)) as usize] * (210 - clean_random_offset).max(0)) as u8;
+                let green: u8 = (sand_vector[(x + y * (win_w / square_size)) as usize] * (192 - clean_random_offset).max(0)) as u8;
+                let blue: u8 = (sand_vector[(x + y * (win_w / square_size)) as usize] * (140 - clean_random_offset).max(0)) as u8;
 
-                canvas.set_draw_color(Color::RGB(color, color, color));
+                canvas.set_draw_color(Color::RGB(red, green, blue));
                 let square = Rect::new(
                     x * square_size,
                     y * square_size,
@@ -80,7 +83,7 @@ pub fn main() {
                         sand_vector[(x + 1 + (y + 1) * (win_w / square_size)) as usize] = 1;
                         sand_vector[(x + y * (win_w / square_size)) as usize] = 0;
                     }
-                    else if sand_vector[(x - 1 + (y + 1) * (win_w / square_size)) as usize] != 1 && x - 1 > 0 {
+                    else if sand_vector[(x - 1 + (y + 1) * (win_w / square_size)) as usize] != 1 && x - 1 > -1 {
                         sand_vector[(x - 1 + (y + 1) * (win_w / square_size)) as usize] = 1;
                         sand_vector[(x + y * (win_w / square_size)) as usize] = 0;
                     }
