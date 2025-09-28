@@ -25,10 +25,10 @@ pub fn main() {
     let mut material_vector: Vec<u8> = Vec::new();
 
     // Window size
-    let win_w = 800;
-    let win_h = 600;
+    let win_w: i32 = 800;
+    let win_h: i32 = 600;
     // Square size
-    let square_size = 10;
+    let square_size: i32 = 10;
 
     for _x in 0..(win_w / square_size) {
         for _y in 0..(win_h / square_size) {
@@ -48,7 +48,6 @@ pub fn main() {
         canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
         canvas.clear();
 
-        // Draw a white square in the center
         for x in 0..(win_w / square_size) {
             for y in 0..(win_h / square_size) {
                 //let color: u8 = ((x + y) % 255) as u8;
@@ -66,9 +65,20 @@ pub fn main() {
                      blue = (140 - clean_random_offset).max(0) as u8;
                 }
                 else if material_vector[(x + y * (win_w / square_size)) as usize] == 2 {
-                     red = (64 - clean_random_offset).max(0) as u8;
-                     green = (128 - clean_random_offset).max(0) as u8;
-                     blue = (255 - clean_random_offset).max(0) as u8;
+                     red = (64 - y - clean_random_offset as i32 / 8).max(0) as u8;
+                     green = (128 - y - clean_random_offset as i32 / 8).max(0) as u8;
+                     blue = (255 - y - clean_random_offset as i32 / 8).max(0) as u8;
+                     if y != 0 {
+                        if material_vector[(x + (y - 1) * (win_w / square_size)) as usize] != 2 {
+                            let int_red = (red as i32 + 196) / 2;
+                            let int_green = (green as i32 + 196) / 2;
+                            let int_blue = (blue as i32 + 255) / 2;
+
+                            red = int_red as u8;
+                            green = int_green as u8;
+                            blue = int_blue as u8;
+                        }
+                     }
                 }
 
                 canvas.set_draw_color(Color::RGB(red, green, blue));
