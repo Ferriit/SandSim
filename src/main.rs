@@ -52,6 +52,8 @@ pub fn main() {
     let mut frame_count = 0;
 
     'running: loop {
+        let prioritize_left = frame_count % 2 == 0;
+        let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
         // Background color
         canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
         canvas.clear();
@@ -155,15 +157,11 @@ pub fn main() {
                     let idx: usize = (x + y * (win_w / square_size)) as usize;
                     let below_idx = idx + (win_w / square_size) as usize;
 
-                    // Move down if empty
                     if material_vector[below_idx] == 0 {
+                        // Move down if empty
                         material_vector[idx] = 0;
                         material_vector[below_idx] = 2;
                     } else {
-                        // Randomly choose direction to try first
-                        let mut rng = rand::thread_rng();
-                        let try_right_first = rng.gen_bool(0.5);
-
                         let width = win_w / square_size;
                         let height = win_h / square_size;
                         let x_isize = x as isize;
@@ -179,26 +177,32 @@ pub fn main() {
                             }
                         };
 
-                        let directions = if try_right_first { [1, -1] } else { [-1, 1] };
+                        // Alternate direction priority each frame
+                        let prioritize_left = frame_count % 2 == 0;
+                        let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
 
-                        // Try diagonal downward first
+                        // Try diagonal down first
+                        let mut moved = false;
                         for &dir in &directions {
                             if let Some(diag) = try_move(dir, 1) {
                                 if material_vector[diag] == 0 {
                                     material_vector[idx] = 0;
                                     material_vector[diag] = 2;
+                                    moved = true;
                                     break;
                                 }
                             }
                         }
 
-                        // If diagonal failed, try horizontal spread
-                        for &dir in &directions {
-                            if let Some(side) = try_move(dir, 0) {
-                                if material_vector[side] == 0 {
-                                    material_vector[idx] = 0;
-                                    material_vector[side] = 2;
-                                    break;
+                        // If diagonals failed, try horizontal spread
+                        if !moved {
+                            for &dir in &directions {
+                                if let Some(side) = try_move(dir, 0) {
+                                    if material_vector[side] == 0 {
+                                        material_vector[idx] = 0;
+                                        material_vector[side] = 2;
+                                        break;
+                                    }
                                 }
                             }
                         }
