@@ -113,6 +113,12 @@ pub fn main() {
                      }
                 }
 
+                else if material_vector[(x + y * win_w / square_size) as usize] == 5 {
+                    red = 32;
+                    green = 32;
+                    blue = 32;
+                }
+
                 canvas.set_draw_color(Color::RGB(red, green, blue));
                 let square = Rect::new(
                     x * square_size,
@@ -346,9 +352,9 @@ pub fn main() {
                 },
                 Event::MouseWheel { x, y, .. } => {
                     selected_material += y as i8;
-                    selected_material %= 4;
+                    selected_material %= 5;
                     if selected_material == -1 {
-                        selected_material = 3;
+                        selected_material = 4;
                     }
                 }
                 _ => {}
