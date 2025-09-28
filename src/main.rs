@@ -96,6 +96,23 @@ pub fn main() {
                     blue = rock_texture[x as usize][y as usize];
                 }
 
+                else if material_vector[(x + y * win_w / square_size) as usize] == 4 {
+                     red = (255 - y - clean_random_offset as i32 / 8).max(0) as u8;
+                     green = (128 - y - clean_random_offset as i32 / 8).max(0) as u8;
+                     blue = (64 - y - clean_random_offset as i32 / 8).max(0) as u8;
+                     if y != 0 {
+                        if material_vector[(x + (y - 1) * (win_w / square_size)) as usize] != 4 {
+                            let int_red = (red as i32 + 255) / 2;
+                            let int_green = (green as i32 + 196) / 2;
+                            let int_blue = (blue as i32 + 180) / 2;
+
+                            red = int_red as u8;
+                            green = int_green as u8;
+                            blue = int_blue as u8;
+                        }
+                     }
+                }
+
                 canvas.set_draw_color(Color::RGB(red, green, blue));
                 let square = Rect::new(
                     x * square_size,
@@ -155,12 +172,88 @@ pub fn main() {
                 }
                 else if material_vector[(x + y * (win_w / square_size)) as usize] == 2 && y < (win_h / square_size - 1) {
                     let idx: usize = (x + y * (win_w / square_size)) as usize;
+
+                    let width = win_w / square_size;
+                    let height = win_h / square_size;
+                    let x_isize = x as isize;
+                    let y_isize = y as isize;
+
+                    let try_move = |dx: isize, dy: isize| -> Option<usize> {
+                        let new_x = x_isize + dx;
+                        let new_y = y_isize + dy;
+                        if new_x >= 0 && new_x < width as isize && new_y >= 0 && new_y < height as isize {
+                            Some((new_x + new_y * width as isize) as usize)
+                        } else {
+                            None
+                        }
+                    };
+
+                    // Check neighbors for lava (4)
+                    let neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+                    let mut lava_hit: Option<usize> = None;
+                    for (dx, dy) in neighbors {
+                        if let Some(n_idx) = try_move(dx, dy) {
+                            if material_vector[n_idx] == 4 {
+                                lava_hit = Some(n_idx);
+                                break;
+                            }
+                        }
+                    }
+
+                    if let Some(lava_idx) = lava_hit {
+                        // Water → stone
+                        material_vector[idx] = 3;
+                        // Remove lava
+                        material_vector[lava_idx] = 0;
+                    } else {
+                        // Continue normal water physics
+                        let below_idx = idx + width as usize;
+
+                        if material_vector[below_idx] == 0 {
+                            // Move down if empty
+                            material_vector[idx] = 0;
+                            material_vector[below_idx] = 2;
+                        } else {
+                            let prioritize_left = frame_count % 2 == 0;
+                            let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
+
+                            // Try diagonal down first
+                            let mut moved = false;
+                            for &dir in &directions {
+                                if let Some(diag) = try_move(dir, 1) {
+                                    if material_vector[diag] == 0 {
+                                        material_vector[idx] = 0;
+                                        material_vector[diag] = 2;
+                                        moved = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            // If diagonals failed, try horizontal spread
+                            if !moved {
+                                for &dir in &directions {
+                                    if let Some(side) = try_move(dir, 0) {
+                                        if material_vector[side] == 0 {
+                                            material_vector[idx] = 0;
+                                            material_vector[side] = 2;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                else if material_vector[(x + y * (win_w / square_size)) as usize] == 4 && y < (win_h / square_size - 1) {
+                    let idx: usize = (x + y * (win_w / square_size)) as usize;
                     let below_idx = idx + (win_w / square_size) as usize;
 
                     if material_vector[below_idx] == 0 {
                         // Move down if empty
                         material_vector[idx] = 0;
-                        material_vector[below_idx] = 2;
+                        material_vector[below_idx] = 4;
                     } else {
                         let width = win_w / square_size;
                         let height = win_h / square_size;
@@ -187,7 +280,7 @@ pub fn main() {
                             if let Some(diag) = try_move(dir, 1) {
                                 if material_vector[diag] == 0 {
                                     material_vector[idx] = 0;
-                                    material_vector[diag] = 2;
+                                    material_vector[diag] = 4;
                                     moved = true;
                                     break;
                                 }
@@ -200,7 +293,7 @@ pub fn main() {
                                 if let Some(side) = try_move(dir, 0) {
                                     if material_vector[side] == 0 {
                                         material_vector[idx] = 0;
-                                        material_vector[side] = 2;
+                                        material_vector[side] = 4;
                                         break;
                                     }
                                 }
@@ -208,13 +301,12 @@ pub fn main() {
                         }
                     }
                 }
-
                 else if material_vector[(x + y * (win_w / square_size)) as usize] == 3 && y < (win_h / square_size - 1) {
                     let idx: usize = (x + y * (win_w / square_size)) as usize;
                     let below = idx + (win_w / square_size) as usize;
 
                     // Move straight down if empty or water
-                    if material_vector[below] == 0 || material_vector[below] == 2 {
+                    if material_vector[below] == 0 || material_vector[below] == 2 || material_vector[below] == 4 {
                         material_vector[below] = 3;
                         material_vector[idx] = if material_vector[below] == 2 { 2 } else { 0 };
                     }
@@ -254,9 +346,9 @@ pub fn main() {
                 },
                 Event::MouseWheel { x, y, .. } => {
                     selected_material += y as i8;
-                    selected_material %= 3;
+                    selected_material %= 4;
                     if selected_material == -1 {
-                        selected_material = 2;
+                        selected_material = 3;
                     }
                 }
                 _ => {}
@@ -274,6 +366,12 @@ pub fn main() {
             2 => { // Rock
                 canvas.set_draw_color(Color::RGB(64, 64, 64));
             },
+            3 => { // Lava
+                canvas.set_draw_color(Color::RGB(255, 128, 64));
+            },
+            4 => { // Steel
+                canvas.set_draw_color(Color::RGB(32, 32, 32));
+            }
 
             _ => {}
         }
