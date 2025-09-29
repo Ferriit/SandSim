@@ -11,6 +11,10 @@ use std::time::Duration;
 use std::thread::sleep;
 
 
+const MOVED_FLAG: u8 = 0b1000_0000;
+const MATERIAL_MASK: u8 = 0b0111_1111;
+
+
 /// Returns a Vec of 1D indices inside a circle of given radius around a 1D position index
 /// `win_cell_w` is the width of the grid
 pub fn indices_in_circle(pos_idx: usize, radius: i32, win_cell_w: usize) -> Vec<usize> {
@@ -235,259 +239,266 @@ pub fn main() {
 
         for x in (0..(win_w / square_size)).rev() {
             for y in (0..(win_h / square_size)).rev() {
-                if material_vector[(x + y * (win_w / square_size)) as usize] == 1
-                    && y < (win_h / square_size - 1)
-                {
-                    let idx = (x + y * (win_w / square_size)) as usize;
-                    let below_idx = (x + (y + 1) * (win_w / square_size)) as usize;
+                let idx = (x + y * (win_w / square_size)) as usize;
 
-                    // Step down if empty or water
-                    if material_vector[below_idx] == 0 || material_vector[below_idx] == 2 {
-                        material_vector[idx] = if material_vector[below_idx] != 2 { 0 } else { 2 };
-                        material_vector[below_idx] = 1;
-                    } else {
-                        // Randomly decide whether to try left or right first
-                        let mut rng = rand::thread_rng();
-                        let try_right_first = rng.gen_bool(0.5);
+                // Skip if already moved this frame
+                if (material_vector[idx] & MOVED_FLAG) != 0 {
+                    continue;
+                }
 
-                        let width = win_w / square_size;
-                        let height = win_h / square_size;
+                let mat = material_vector[idx] & MATERIAL_MASK;
 
+                let width = win_w / square_size;
+                let height = win_h / square_size;
+
+                match mat {
+                    // === SAND (1) ===
+                    1 if y < height - 1 => {
+                        let below_idx = (x + (y + 1) * width) as usize;
+                        let below_mat = material_vector[below_idx] & MATERIAL_MASK;
+
+                        if below_mat == 0 || below_mat == 2 {
+                            material_vector[idx] = if below_mat != 2 { 0 } else { 2 };
+                            material_vector[below_idx] = 1 | MOVED_FLAG;
+                        } else {
+                            let x_isize = x as isize;
+                            let y_isize = y as isize;
+
+                            let try_move = |dx: isize| -> Option<usize> {
+                                let new_x = x_isize + dx;
+                                let new_y = y_isize + 1;
+                                if new_x >= 0 && new_x < width as isize && new_y < height as isize {
+                                    Some((new_x + new_y * width as isize) as usize)
+                                } else {
+                                    None
+                                }
+                            };
+
+                            let mut free_spots = Vec::new();
+                            if let Some(dl) = try_move(-1) {
+                                let m = material_vector[dl] & MATERIAL_MASK;
+                                if m == 0 || m == 2 {
+                                    free_spots.push(dl);
+                                }
+                            }
+                            if let Some(dr) = try_move(1) {
+                                let m = material_vector[dr] & MATERIAL_MASK;
+                                if m == 0 || m == 2 {
+                                    free_spots.push(dr);
+                                }
+                            }
+
+                            if !free_spots.is_empty() {
+                                use rand::seq::SliceRandom;
+                                let mut rng = rand::thread_rng();
+                                let target_idx = *free_spots.choose(&mut rng).unwrap();
+
+                                material_vector[idx] = if (material_vector[target_idx] & MATERIAL_MASK) != 2 { 0 } else { 2 };
+                                material_vector[target_idx] = 1 | MOVED_FLAG;
+                            }
+                        }
+                    }
+
+                    // === WATER (2) ===
+                    2 if y < height - 1 => {
                         let x_isize = x as isize;
                         let y_isize = y as isize;
 
-                        let try_move = |dx: isize| -> Option<usize> {
+                        let try_move = |dx: isize, dy: isize| -> Option<usize> {
                             let new_x = x_isize + dx;
-                            let new_y = y_isize + 1;
-                            if new_x >= 0 && new_x < width as isize && new_y >= 0 && new_y < height as isize {
+                            let new_y = y_isize + dy;
+                            if new_x >= 0 && new_x < width as isize && new_y < height as isize {
                                 Some((new_x + new_y * width as isize) as usize)
                             } else {
                                 None
                             }
                         };
 
-                        let directions = if try_right_first { [1, -1] } else { [-1, 1] };
+                        // Check for interactions with lava or ice
+                        let neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+                        let mut lava_hit: Option<usize> = None;
+                        let mut touching_ice = false;
 
-                        for &dir in &directions {
-                            if let Some(target_idx) = try_move(dir) {
-                                if material_vector[target_idx] == 0 || material_vector[target_idx] == 2 {
-                                    material_vector[idx] = if material_vector[target_idx] != 2 { 0 } else { 2 };
-                                    material_vector[target_idx] = 1;
-                                    break;
+                        for (dx, dy) in neighbors {
+                            if let Some(n_idx) = try_move(dx, dy) {
+                                match material_vector[n_idx] & MATERIAL_MASK {
+                                    4 => { lava_hit = Some(n_idx); break; }
+                                    6 => touching_ice = true,
+                                    _ => {}
+                                }
+                            }
+                        }
+
+                        if let Some(lava_idx) = lava_hit {
+                            material_vector[idx] = 3;
+                            material_vector[lava_idx] = 0;
+                        } else if touching_ice {
+                            material_vector[idx] = 6;
+                        } else {
+                            let below_idx = idx + width as usize;
+                            if (material_vector[below_idx] & MATERIAL_MASK) == 0 {
+                                material_vector[idx] = 0;
+                                material_vector[below_idx] = 2 | MOVED_FLAG;
+                            } else {
+                                let mut rng = rand::thread_rng();
+                                let directions = if rng.gen_bool(0.5) { [-1, 1] } else { [1, -1] };
+
+                                let mut moved = false;
+                                for &dir in &directions {
+                                    if let Some(diag) = try_move(dir, 1) {
+                                        if (material_vector[diag] & MATERIAL_MASK) == 0 {
+                                            material_vector[idx] = 0;
+                                            material_vector[diag] = 2 | MOVED_FLAG;
+                                            moved = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                if !moved {
+                                    let mut free_sides = Vec::new();
+                                    for &dir in &directions {
+                                        if let Some(side) = try_move(dir, 0) {
+                                            if (material_vector[side] & MATERIAL_MASK) == 0 {
+                                                free_sides.push(side);
+                                            }
+                                        }
+                                    }
+
+                                    if !free_sides.is_empty() {
+                                        use rand::seq::SliceRandom;
+                                        let target_idx = *free_sides.choose(&mut rng).unwrap();
+                                        material_vector[idx] = 0;
+                                        material_vector[target_idx] = 2 | MOVED_FLAG;
+                                    }
                                 }
                             }
                         }
                     }
-                }
-                else if material_vector[(x + y * (win_w / square_size)) as usize] == 2 && y < (win_h / square_size - 1) {
-                    let idx: usize = (x + y * (win_w / square_size)) as usize;
 
-                    let width = win_w / square_size;
-                    let height = win_h / square_size;
-                    let x_isize = x as isize;
-                    let y_isize = y as isize;
-
-                    let try_move = |dx: isize, dy: isize| -> Option<usize> {
-                        let new_x = x_isize + dx;
-                        let new_y = y_isize + dy;
-                        if new_x >= 0 && new_x < width as isize && new_y >= 0 && new_y < height as isize {
-                            Some((new_x + new_y * width as isize) as usize)
-                        } else {
-                            None
-                        }
-                    };
-
-                    // Check neighbors for lava (4) or ice (6)
-                    let neighbors = [(0, -1), (0, 1), (-1, 0), (1, 0)];
-                    let mut lava_hit: Option<usize> = None;
-                    let mut touching_ice = false;
-
-                    for (dx, dy) in neighbors {
-                        if let Some(n_idx) = try_move(dx, dy) {
-                            match material_vector[n_idx] {
-                                4 => { lava_hit = Some(n_idx); break; }
-                                6 => { touching_ice = true; }
-                                _ => {}
-                            }
+                    // === STONE (3) ===
+                    3 if y < height - 1 => {
+                        let below = idx + width as usize;
+                        let below_mat = material_vector[below] & MATERIAL_MASK;
+                        if below_mat == 0 || below_mat == 2 || below_mat == 4 {
+                            material_vector[below] = 3 | MOVED_FLAG;
+                            material_vector[idx] = if below_mat == 2 { 2 } else { 0 };
                         }
                     }
 
-                    if let Some(lava_idx) = lava_hit {
-                        // Water → stone, remove lava
-                        material_vector[idx] = 3;
-                        material_vector[lava_idx] = 0;
-                    } 
-                    else if touching_ice {
-                        // Water touching ice → turns into ice
-                        material_vector[idx] = 6;
-                    } 
-                    else {
-                        // Continue normal water physics
+                    // === LAVA (4) ===
+                    4 if y < height - 1 => {
+                        let x_isize = x as isize;
+                        let y_isize = y as isize;
+
+                        let try_move = |dx: isize, dy: isize| -> Option<usize> {
+                            let new_x = x_isize + dx;
+                            let new_y = y_isize + dy;
+                            if new_x >= 0 && new_x < width as isize && new_y < height as isize {
+                                Some((new_x + new_y * width as isize) as usize)
+                            } else {
+                                None
+                            }
+                        };
+
                         let below_idx = idx + width as usize;
+                        let mut rng = rand::thread_rng();
+                        let directions = if rng.gen_bool(0.5) { [-1, 1] } else { [1, -1] };
 
-                        if material_vector[below_idx] == 0 {
-                            // Move down if empty
+                        let mut moved = false;
+                        if (material_vector[below_idx] & MATERIAL_MASK) == 0 {
                             material_vector[idx] = 0;
-                            material_vector[below_idx] = 2;
-                        } else {
-                            let prioritize_left = frame_count % 2 == 0;
-                            let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
+                            material_vector[below_idx] = 4 | MOVED_FLAG;
+                            moved = true;
+                        }
 
-                            // Try diagonal down first
-                            let mut moved = false;
+                        if !moved {
                             for &dir in &directions {
                                 if let Some(diag) = try_move(dir, 1) {
-                                    if material_vector[diag] == 0 {
+                                    if (material_vector[diag] & MATERIAL_MASK) == 0 {
                                         material_vector[idx] = 0;
-                                        material_vector[diag] = 2;
+                                        material_vector[diag] = 4 | MOVED_FLAG;
                                         moved = true;
                                         break;
                                     }
                                 }
                             }
+                        }
 
-                            // If diagonals failed, try horizontal spread
-                            if !moved {
-                                for &dir in &directions {
-                                    if let Some(side) = try_move(dir, 0) {
-                                        if material_vector[side] == 0 {
-                                            material_vector[idx] = 0;
-                                            material_vector[side] = 2;
-                                            break;
-                                        }
+                        if !moved {
+                            let mut free_sides = Vec::new();
+                            for &dir in &directions {
+                                if let Some(side) = try_move(dir, 0) {
+                                    if (material_vector[side] & MATERIAL_MASK) == 0 {
+                                        free_sides.push(side);
                                     }
                                 }
                             }
+                            if !free_sides.is_empty() {
+                                use rand::seq::SliceRandom;
+                                let target_idx = *free_sides.choose(&mut rng).unwrap();
+                                material_vector[idx] = 0;
+                                material_vector[target_idx] = 4 | MOVED_FLAG;
+                            }
                         }
                     }
-                }
-                else if material_vector[(x + y * win_w / square_size) as usize] == 3 && y < (win_h / square_size - 1) {
-                    let idx = (x + y * win_w / square_size) as usize;
-                    let below = idx + (win_w / square_size) as usize;
 
-                    // Move straight down if empty or water
-                    if material_vector[below] == 0 || material_vector[below] == 2 || material_vector[below] == 4 {
-                        material_vector[below] = 3;
-                        material_vector[idx] = if material_vector[below] == 2 { 2 } else { 0 };
-                    }
-                }
+                    // === ICE (6) ===
+                    6 if y < height - 1 => {
+                        let x_isize = x as isize;
+                        let y_isize = y as isize;
 
-                else if material_vector[(x + y * (win_w / square_size)) as usize] == 4 && y < (win_h / square_size - 1) {
-                    let idx: usize = (x + y * (win_w / square_size)) as usize;
-                    let below_idx = idx + (win_w / square_size) as usize;
+                        let in_bounds = |nx: isize, ny: isize| -> bool {
+                            nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize
+                        };
 
-                    let width = win_w / square_size;
-                    let height = win_h / square_size;
-                    let x_isize = x as isize;
-                    let y_isize = y as isize;
-
-                    let try_move = |dx: isize, dy: isize| -> Option<usize> {
-                        let new_x = x_isize + dx;
-                        let new_y = y_isize + dy;
-                        if new_x >= 0 && new_x < width as isize && new_y >= 0 && new_y < height as isize {
-                            Some((new_x + new_y * width as isize) as usize)
-                        } else {
-                            None
-                        }
-                    };
-
-                    let prioritize_left = frame_count % 2 == 0;
-                    let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
-
-                    let mut moved = false;
-
-                    // 1. Try straight down first
-                    if material_vector[below_idx] == 0 {
-                        material_vector[idx] = 0;
-                        material_vector[below_idx] = 4;
-                        moved = true;
-                    }
-
-                    // 2. If can't go down, try diagonals
-                    if !moved {
-                        for &dir in &directions {
-                            if let Some(diag) = try_move(dir, 1) {
-                                if material_vector[diag] == 0 {
-                                    material_vector[idx] = 0;
-                                    material_vector[diag] = 4;
-                                    moved = true;
-                                    break;
+                        let mut touching_lava = false;
+                        for dy in -1..=1 {
+                            for dx in -1..=1 {
+                                if dx == 0 && dy == 0 { continue; }
+                                let nx = x_isize + dx;
+                                let ny = y_isize + dy;
+                                if in_bounds(nx, ny) {
+                                    let n_idx = (nx + ny * width as isize) as usize;
+                                    if (material_vector[n_idx] & MATERIAL_MASK) == 4 {
+                                        touching_lava = true;
+                                        break;
+                                    }
                                 }
                             }
+                            if touching_lava { break; }
                         }
-                    }
 
-                    // 3. If diagonals fail, spread sideways
-                    if !moved {
-                        for &dir in &directions {
-                            if let Some(side) = try_move(dir, 0) {
-                                if material_vector[side] == 0 {
-                                    material_vector[idx] = 0;
-                                    material_vector[side] = 4;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                else if material_vector[(x + y * (win_w / square_size)) as usize] == 6
-                    && y < (win_h / square_size - 1)
-                {
-                    let idx = (x + y * (win_w / square_size)) as usize;
-                    let width = win_w / square_size;
-                    let height = win_h / square_size;
-
-                    let x_isize = x as isize;
-                    let y_isize = y as isize;
-
-                    let in_bounds = |nx: isize, ny: isize| -> bool {
-                        nx >= 0 && nx < width as isize && ny >= 0 && ny < height as isize
-                    };
-
-                    // Check for lava directly adjacent (8 neighbors)
-                    let mut touching_lava = false;
-                    for dy in -1..=1 {
-                        for dx in -1..=1 {
-                            if dx == 0 && dy == 0 {
-                                continue; // skip self
-                            }
-                            let nx = x_isize + dx;
-                            let ny = y_isize + dy;
-                            if in_bounds(nx, ny) {
-                                let n_idx = (nx + ny * width as isize) as usize;
-                                if material_vector[n_idx] == 4 {
-                                    touching_lava = true;
-                                    break;
-                                }
-                            }
-                        }
                         if touching_lava {
-                            break;
+                            material_vector[idx] = 2;
+                        } else {
+                            let below_idx = idx + width as usize;
+                            let below_mat = material_vector[below_idx] & MATERIAL_MASK;
+                            if below_mat == 0 || below_mat == 2 {
+                                material_vector[below_idx] = 6 | MOVED_FLAG;
+                                material_vector[idx] = if below_mat == 2 { 2 } else { 0 };
+                            }
                         }
                     }
 
-                    if touching_lava {
-                        // Ice melts → water
-                        material_vector[idx] = 2;
-                    } else {
-                        // Only step straight down
-                        let below_idx = idx + width as usize;
-                        if material_vector[below_idx] == 0 || material_vector[below_idx] == 2 {
-                            material_vector[below_idx] = 6;
-                            material_vector[idx] = if material_vector[below_idx] == 2 { 2 } else { 0 };
+                    // === BOMB (7) ===
+                    7 => {
+                        let damaged_cells = indices_in_circle(idx, 5, width as usize);
+                        for i in damaged_cells {
+                            if i > 1 && i < (width * height) as usize {
+                                material_vector[i] = 0;
+                            }
                         }
                     }
-                }
-                else if material_vector[(x + y * win_w / square_size) as usize] == 7 {
-                    let damaged_cells = indices_in_circle((x + y * win_w / square_size) as usize, 5, (win_w / square_size) as usize);
-                    for i in damaged_cells {
-                        if i > 1 && i < (win_w / square_size * win_h / square_size) as usize {
-                        material_vector[i] = 0;
-                        }
-                    }
+
+                    _ => {}
                 }
             }
+        }
+
+        // === End-of-frame cleanup: clear moved flags ===
+        for cell in material_vector.iter_mut() {
+            *cell &= MATERIAL_MASK;
         }
 
         // Get mouse state from the event pump
