@@ -571,6 +571,21 @@ pub fn main() {
                         selected_material = 7;
                     }
                 }
+                Event::KeyDown { keycode: Some(key), .. } => {
+                    match key {
+                        Keycode::_0 => {},
+                        Keycode::_1 => selected_material = 0,
+                        Keycode::_2 => selected_material = 1,
+                        Keycode::_3 => selected_material = 2,
+                        Keycode::_4 => selected_material = 3,
+                        Keycode::_5 => selected_material = 4,
+                        Keycode::_6 => selected_material = 5,
+                        Keycode::_7 => selected_material = 6,
+                        Keycode::_8 => selected_material = 7,
+                        Keycode::_9 => {},
+                        _ => {}
+                    }
+                }
                 _ => {}
             }
         }
