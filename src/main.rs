@@ -11,6 +11,32 @@ use std::time::Duration;
 use std::thread::sleep;
 
 
+/// Returns a Vec of 1D indices inside a circle of given radius around a 1D position index
+/// `win_cell_w` is the width of the grid
+pub fn indices_in_circle(pos_idx: usize, radius: i32, win_cell_w: usize) -> Vec<usize> {
+    let mut indices = Vec::new();
+
+    let cx = (pos_idx % win_cell_w) as i32;
+    let cy = (pos_idx / win_cell_w) as i32;
+
+    let r2 = radius * radius;
+
+    for dx in -radius..=radius {
+        for dy in -radius..=radius {
+            if dx*dx + dy*dy <= r2 {
+                let x = cx + dx;
+                let y = cy + dy;
+                if x >= 0 && y >= 0 {
+                    indices.push(x as usize + y as usize * win_cell_w);
+                }
+            }
+        }
+    }
+
+    indices
+}
+
+
 /// Generates a procedural ice texture using Voronoi noise for "shattered" effect
 /// 
 /// # Arguments
@@ -104,10 +130,7 @@ pub fn main() {
         }
     }
     material_vector.push(0); // it crashes without this :(
-
-//    let mut prev_mouse_state = true;
-//    let mut prev_mouse_x: i32 = -1;
-//    let mut prev_mouse_y: i32 = -1;
+    
 
     let mut frame_count = 0;
 
@@ -130,9 +153,9 @@ pub fn main() {
                 let mut blue: u8 = 0;
 
                 if material_vector[(x + y * (win_w / square_size)) as usize] == 1 {
-                     red = (210 - clean_random_offset).max(0) as u8;
-                     green = (192 - clean_random_offset).max(0) as u8;
-                     blue = (140 - clean_random_offset).max(0) as u8;
+                     red = (210 - clean_random_offset - rock_texture[x as usize][y as usize] / 2).max(0) as u8;
+                     green = (192 - clean_random_offset - rock_texture[x as usize][y as usize] / 2).max(0) as u8;
+                     blue = (140 - clean_random_offset - rock_texture[x as usize][y as usize] / 2).max(0) as u8;
                 }
                 else if material_vector[(x + y * (win_w / square_size)) as usize] == 2 {
                      red = (64 - y - clean_random_offset as i32 / 8).max(0) as u8;
@@ -192,6 +215,11 @@ pub fn main() {
                         green = 225;
                         blue = 255;
                     }
+                }
+                else if material_vector[(x + y * win_w / square_size) as usize] == 7 {
+                    red = 255;
+                    green = 0;
+                    blue = 0;
                 }
 
                 canvas.set_draw_color(Color::RGB(red, green, blue));
@@ -451,6 +479,14 @@ pub fn main() {
                         }
                     }
                 }
+                else if material_vector[(x + y * win_w / square_size) as usize] == 7 {
+                    let damaged_cells = indices_in_circle((x + y * win_w / square_size) as usize, 5, (win_w / square_size) as usize);
+                    for i in damaged_cells {
+                        if i > 1 && i < (win_w / square_size * win_h / square_size) as usize {
+                        material_vector[i] = 0;
+                        }
+                    }
+                }
             }
         }
 
@@ -486,9 +522,9 @@ pub fn main() {
                 },
                 Event::MouseWheel { x, y, .. } => {
                     selected_material += y as i8;
-                    selected_material %= 6;
+                    selected_material %= 7;
                     if selected_material == -1 {
-                        selected_material = 5;
+                        selected_material = 6;
                     }
                 }
                 _ => {}
@@ -512,9 +548,12 @@ pub fn main() {
             4 => { // Steel
                 canvas.set_draw_color(Color::RGB(32, 32, 32));
             },
-            5 => {
+            5 => { // Ice
                 canvas.set_draw_color(Color::RGB(128, 196, 255));
             },
+            6 => { // Bomb
+                canvas.set_draw_color(Color::RGB(255, 0, 0));
+            }
 
             _ => {}
         }
