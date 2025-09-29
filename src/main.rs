@@ -225,6 +225,11 @@ pub fn main() {
                     green = 0;
                     blue = 0;
                 }
+                else if material_vector[(x + y * win_w / square_size) as usize] == 8 {
+                    red = 255;
+                    green = 255;
+                    blue = 255;
+                }
 
                 canvas.set_draw_color(Color::RGB(red, green, blue));
                 let square = Rect::new(
@@ -307,8 +312,16 @@ pub fn main() {
                         let try_move = |dx: isize, dy: isize| -> Option<usize> {
                             let new_x = x_isize + dx;
                             let new_y = y_isize + dy;
-                            if new_x >= 0 && new_x < width as isize && new_y < height as isize {
-                                Some((new_x + new_y * width as isize) as usize)
+
+                            if new_x < 0 || new_y < 0 {
+                                return None;
+                            }
+
+                            let new_x = new_x as usize;
+                            let new_y = new_y as usize;
+
+                            if new_x < width as usize && new_y < height as usize {
+                                Some(new_x + new_y * width as usize)
                             } else {
                                 None
                             }
@@ -490,6 +503,26 @@ pub fn main() {
                             }
                         }
                     }
+                    // === AIRPLANE (8) ===
+                    8 => {
+                        let cells_per_row = win_w / square_size; // number of horizontal cells
+
+                        // Check if not at right edge
+                        if (idx as i32) % cells_per_row != cells_per_row - 1 {
+                            let right = idx + 1;
+                            if material_vector[right] == 0 {
+                                // Move one step right
+                                material_vector[right] = 8;
+                                material_vector[idx] = 0;
+                            } else {
+                                // Blocked by non-zero cell → turn into type 7
+                                material_vector[idx] = 7;
+                            }
+                        } else {
+                            // Reached the edge → turn into type 7
+                            material_vector[idx] = 7;
+                        }
+                    }
 
                     _ => {}
                 }
@@ -533,9 +566,9 @@ pub fn main() {
                 },
                 Event::MouseWheel { x, y, .. } => {
                     selected_material += y as i8;
-                    selected_material %= 7;
+                    selected_material %= 8;
                     if selected_material == -1 {
-                        selected_material = 6;
+                        selected_material = 7;
                     }
                 }
                 _ => {}
@@ -564,7 +597,10 @@ pub fn main() {
             },
             6 => { // Bomb
                 canvas.set_draw_color(Color::RGB(255, 0, 0));
-            }
+            },
+            7 => { // Airplane
+                canvas.set_draw_color(Color::RGB(255, 255, 255));
+            },
 
             _ => {}
         }
