@@ -136,11 +136,11 @@ pub fn main() {
     material_vector.push(0); // it crashes without this :(
     
 
-    let mut frame_count = 0;
+    // let mut frame_count = 0;
 
     'running: loop {
-        let prioritize_left = frame_count % 2 == 0;
-        let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
+        // let prioritize_left = frame_count % 2 == 0;
+        // let directions = if prioritize_left { [-1, 1] } else { [1, -1] };
         // Background color
         canvas.set_draw_color(Color::RGBA(0, 0, 0, 255));
         canvas.clear();
@@ -564,7 +564,7 @@ pub fn main() {
                 | Event::KeyDown { keycode: Some(Keycode::Escape), .. } => {
                     break 'running;
                 },
-                Event::MouseWheel { x, y, .. } => {
+                Event::MouseWheel { y, .. } => {
                     selected_material += y as i8;
                     selected_material %= 8;
                     if selected_material == -1 {
@@ -625,7 +625,7 @@ pub fn main() {
 
         canvas.present();
 
-        frame_count += 1;
+        // frame_count += 1;
         sleep(Duration::from_millis(((1.0 / 30.0) * 1000.0) as u64));
     }
 }
